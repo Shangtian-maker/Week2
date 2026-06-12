@@ -11,9 +11,37 @@
 
 3.提取JSONL
 
+本次使用LLM，提取将候选文本输入 LLM 生成两类事实记录：
+subscription_flow（认缴流量）
+equity_snapshot（股权结构存量）
+输出 outputs/week2_jsonl/，每家公司一份 JSONL。
+
+遇到问题及解决：
+投资者未披露 → 标记为 manual_review，不填空值。
+数字字段可能缺失或单位不一致 → 严格从原文解析数值，只填 PDF 明确披露的字段。
+
 
 4.校验
 
+使用 scripts/validate_jsonl.py 对 JSONL 进行 Pydantic schema 校验。
+
+检查点：
+record_type 是否正确
+必填字段是否存在
+数值列是否可解析
+投资者名称是否能回源
+t0 股权结构是否存在
+认缴流量与股权变化是否一致
+
+输出：
+logs/schema_validation_log.csv
+logs/cross_check_summary.csv
+
+遇到问题及解决：
+早期日志缺少数字字段 → 本周保留全部数值列用于复核。
+数据异常或缺失 → 标记 manual_review，不盲目补全。
+
+具体包括：
 （1）JSONL 结构校验：检查每一行是否能被解析为合法 JSON 对象，确保文件可以被程序读取。作用是发现 JSON 格式错误、空行异常、非对象记录等基础问题。
 （2）record_type 类型校验：检查每条记录是否只属于两类之一subscription_flow 或 equity_snapshot。作用是防止记录类型写错，保证后续能正确分表。
 （3）Pydantic Schema 字段校验：检查两类记录的字段是否齐全、字段类型是否正确、必填字段是否为空。作用是保证 JSONL 符合统一数据结构，便于批量处理和转 Excel。
@@ -23,3 +51,11 @@
 （7）股权结构存量合计校验：按同一时点汇总股东持股数或出资额，检查是否等于该时点披露的总股本或总出资额。作用：发现漏抽股东、重复抽取、单位错误或股东明细数字错误。
 （8）流量—存量交叉校验：检查每次认缴数量合计是否能解释相邻股权结构时点的股本变化，并检查新增认购方是否出现在增资后股权结构中。作用：验证认缴流量和股权结构存量是否一致，发现漏抽增资、错配时间点、认购方或持股数不一致等问题。
 本环节通过“格式校验 + 字段校验 + 证据校验 + 数值交叉校验”，把 JSONL 从单纯抽取结果升级为可解析、可复核、可追溯、可计算的数据成果。最终输出 schema_validation_log.csv 和 cross_check_summary.csv，用于标记通过记录和待复核问题。
+
+
+5.本周产出
+JSONL：outputs/week2_jsonl/，每家公司一份。
+Excel 查看版：outputs/week2_excel/，每家公司 3 张 Sheet。
+关键页批注 PDF：annotations_pdf/，每家公司一份。
+Schema 与 cross-check 日志：logs/schema_validation_log.csv、logs/cross_check_summary.csv。
+可复核流程：可从 PDF → JSONL → Excel → 校验结果，全程可复现。
